@@ -1,26 +1,26 @@
-# Real-Time Person & Elderly Fall Detection System
-## System Architecture, Occlusion Mitigation & Technical Specification
+# 实时单人及老人跌倒检测系统
+## 系统架构、遮挡处理与技术规格
 
-> **中文版本 / Chinese version**: [FALL_DETECTION_SYSTEM_DESIGN.zh-CN.md](FALL_DETECTION_SYSTEM_DESIGN.zh-CN.md)
-
----
-
-## 1. Executive Summary
-
-This document specifies an AI-driven **Person & Elderly Fall Detection System**. The primary challenge in real-world vision-based fall detection — especially in home and assisted-living settings — is **occlusion**: partial blockage by beds, tables, sofas, chairs, or doorways, as well as self-occlusion.
-
-The design targets:
-
-1. **High sensitivity & specificity**: >98% true fall detection with near-zero false alarms.
-2. **Occlusion resilience**: Multi-layered spatio-temporal keypoint imputation, centroid trajectory kinematics, 3D pose lifting, and occlusion-zone state tracking.
-3. **Edge-first & privacy-preserving**: Processing happens locally on edge hardware (NVIDIA Jetson, Intel NUC, Hailo-8) without sending raw RGB streams to the cloud; keypoints and anonymous stick figures are extracted at the edge.
-4. **Multi-stage verification state machine**: Preventing false positives from ADLs such as lying on a bed, sitting down fast, or tying shoelaces.
+> **English version**: [FALL_DETECTION_SYSTEM_DESIGN.md](FALL_DETECTION_SYSTEM_DESIGN.md)
 
 ---
 
-## 2. End-to-End System Architecture
+## 1. 执行摘要
 
-The end-to-end pipeline processes real-time frames (15–30 FPS) from standard IP/RTSP cameras, wide-angle ceiling/wall lenses, or multi-camera setups.
+本文档描述一个人工智能驱动的**单人及老人跌倒检测系统**的完整技术规格。视觉跌倒检测在真实场景（尤其是家庭和养老环境）中面临的首要问题是**遮挡**：例如床、桌子、沙发、椅子或门框造成的部分遮挡，以及人体自遮挡。
+
+本设计重点关注以下目标：
+
+1. **高灵敏度与高特异性**：真实跌倒检出率高于 98%，同时保持极低误报率。
+2. **遮挡鲁棒性**：采用多层时空关键点插补、质心轨迹运动学、3D 姿态提升与遮挡区域状态跟踪。
+3. **边缘优先与隐私保护**：在边缘设备（NVIDIA Jetson、Intel NUC、Hailo-8）本地处理视频流，不向云端发送原始 RGB 视频。关键点与匿名火柴人表示在边缘即时提取。
+4. **多阶段验证状态机**：避免将日常活动（如快速躺上床、快速坐下、系鞋带）误判为跌倒。
+
+---
+
+## 2. 端到端系统架构
+
+端到端处理管线以 15-30 FPS 处理来自标准 IP/RTSP 摄像头、广角吸顶/壁挂镜头或多相机组合的实时视频帧。
 
 ```mermaid
 flowchart TD
@@ -62,9 +62,9 @@ flowchart TD
 
 ---
 
-## 3. The Occlusion Problem
+## 3. 遮挡问题：深入分析与技术方案
 
-Occlusion is the single biggest cause of failure in vision-based fall detection. When an elderly person falls behind a sofa, coffee table, or bed, traditional pose estimators lose landmark tracking (missing ankles, knees, or hips), causing misclassification or undetected falls.
+遮挡是视觉跌倒检测失败的最主要原因。当老人倒在沙发、咖啡桌或床后时，传统姿态估计算法会丢失地标跟踪（脚踝、膝盖或髋部缺失），从而导致严重的误分类或漏检。
 
 ```
        [Camera View]
@@ -78,14 +78,14 @@ Occlusion is the single biggest cause of failure in vision-based fall detection.
    ░ (Knees/Ankles Lost)░  <-- Occluded Keypoints (Confidence Score < 0.2)
 ```
 
-### 3.1 Failure modes under occlusion
+### 3.1 遮挡下的失效模式
 
-1. **Vanishing keypoints**: Loss of lower-body joints makes ground-contact and posture-angle metrics undefined.
-2. **Abrupt aspect-ratio shrinkage**: Bounding-box height drops instantly and may be confused with sitting or walking away.
-3. **Tracklet fragmentation (ID switching)**: Lost track IDs break temporal velocity calculations across frames.
-4. **False negatives from stalled motion**: Post-fall stillness cannot be visually confirmed if the person lies fully behind a barrier.
+1. **关键点消失**：下肢关节点丢失后，依赖地面接触和姿态角度的常规指标无法计算。
+2. **边界框纵横比突变**：人倒在家具后时，其边界框高度瞬时下降，标准检测器可能将其误判为正常坐下或走远。
+3. **轨迹碎片化（ID 切换）**：遮挡期间可能丢失跟踪 ID，破坏跨帧的垂直速度计算。
+4. **运动停滞导致的漏检**：如果人完全躺在遮挡物后方，无法通过视觉确认跌倒后的静止姿态。
 
-### 3.2 Multi-tiered mitigation strategies
+### 3.2 多层遮挡缓解策略
 
 ```mermaid
 graph TD
@@ -110,41 +110,41 @@ graph TD
     end
 ```
 
-#### Strategy A: GNN keypoint imputation & bone constraints
+#### 策略 A：图神经网络关键点插补与骨骼约束
 
-When keypoint confidence falls below `τ_conf` (e.g. `< 0.25`), the joint is marked occluded. Instead of discarding the frame or zeroing coordinates:
+当关键点置信度 `c_i < τ_conf`（例如小于 0.25）时，将其标记为遮挡。与其丢弃该帧或将坐标置零，不如：
 
-- **Spatial biomechanical priors**: Use human kinematic-tree priors (rigid bone lengths `ℓ_ij = ‖p_i - p_j‖₂`) to bound occluded joints relative to visible parent joints (Hip → Knee → Ankle).
-- **Temporal GCN imputation**: Use a bidirectional ST-GCN / spatio-temporal transformer (or Bi-LSTM) over a sliding window `W = [t-N, ..., t]` to impute missing coordinates from motion momentum.
+- **空间生物力学先验**：利用人体运动学树先验（刚性骨骼长度 `ℓ_ij = ‖p_i - p_j‖₂`），根据可见父节点（如髋 → 膝 → 踝）约束遮挡关节的可能位置。
+- **时间 GCN 插补**：使用双向 ST-GCN / 时空 Transformer（或 Bi-LSTM），在滑动窗口 `W = [t-N, ..., t]` 上学习关节轨迹，基于运动动量插补缺失坐标。
 
-#### Strategy B: Centroid kinematics & optical flow
+#### 策略 B：质心运动学与光流矢量集成
 
-Even if ~70% of the body is occluded, the visible upper body (head, neck, shoulders) and the global centroid still show distinctive fall dynamics:
+即使约 70% 的身体被家具遮挡，可见的上半身（头、颈、肩）和全局质心仍会表现出明显的跌倒动态：
 
-- **Downward velocity surge (`v_y`)**:
+- **垂直速度突增（`v_y`）**：
   $$\bar{v}_y(t) = \frac{1}{|V_{vis}|} \sum_{i \in V_{vis}} \frac{y_i(t) - y_i(t - \Delta t)}{\Delta t}$$
-- **Downward acceleration spike (`a_y`)**:
+- **垂直加速度尖峰（`a_y`）**：
   $$a_y(t) = \frac{\bar{v}_y(t) - \bar{v}_y(t - \Delta t)}{\Delta t} > a_{fall\_threshold} \quad (\approx 2.5 - 3.5 \text{ g})$$
-- **Dense optical flow**: Evaluate sparse Lucas-Kanade or RAFT flow over the person's bounding box for sudden downward flux followed by abrupt stop at ground/furniture height.
+- **稠密光流方向**：在人体边界框上评估稀疏 Lucas-Kanade 或 RAFT 光流矢量，检测突然的向下通量，随后在落地/家具高度处运动突然停止。
 
-#### Strategy C: Semantic occlusion zones & "fall-into-occlusion" tracking
+#### 策略 C：语义遮挡区域映射与"坠入遮挡"状态跟踪
 
-1. **Static calibration & segmentation**: Generate a floorplan mask of potential occlusion zones (sofas, tables, beds, cabinets) using semantic segmentation (e.g. SegFormer / SAM).
-2. **Entry dynamics**:
-   - Walking behind the sofa at normal velocity (`v_y ≈ 0, v_x ≈ constant`) → `NORMAL_OCCLUSION`.
-   - Entering a zone with high downward acceleration (`a_y >> 0`) and dropping below the furniture edge → `FALL_INTO_OCCLUSION_SUSPECTED`.
-3. **Inactivity & disappearance timer**: If the person does not re-emerge or stand up within a configurable window (e.g. 10–20 s), trigger a fall alarm.
+1. **场景静态标定 / 语义分割**：初始部署时，使用语义分割（如 SegFormer / SAM）生成二维平面图掩码，标识潜在的遮挡区域（沙发、桌子、床、柜子）。
+2. **进入动态分析**：
+   - 人以正常速度走过沙发后方（`v_y ≈ 0, v_x ≈ 常数`）时，状态为 `NORMAL_OCCLUSION`。
+   - 人携带较大的垂直向下加速度矢量（`a_y >> 0`）进入遮挡区域并下降到家具边缘以下时，状态为 `FALL_INTO_OCCLUSION_SUSPECTED`。
+3. **静止 / 消失计时器**：若状态为 `FALL_INTO_OCCLUSION_SUSPECTED`，且人在可配置窗口（如 10-20 秒）内没有重新出现或恢复站立姿态，则触发跌倒报警。
 
-#### Strategy D: Multi-camera epipolar consensus (optional)
+#### 策略 D：多相机极线几何一致性（可选多视角部署）
 
-In multi-camera setups (e.g. two diagonal cameras in a living room):
+在多相机安装场景（如客厅对角线布设两个相机）中：
 
-- Compute the homography `H₁₂` and fundamental matrix `F` between views.
-- If camera 1 is occluded, camera 2's unoccluded rays reconstruct the full 3D skeleton via DLT or epipolar matching.
+- 计算视图间的单应矩阵 `H₁₂` 与基础矩阵 `F`。
+- 若相机 1 存在严重遮挡，相机 2 无遮挡的 3D 射线投影可通过直接线性变换（DLT）或极线匹配重建完整 3D 骨架。
 
 ---
 
-## 4. Technical Pipeline & Modules
+## 4. 详细技术管线与模块
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -217,79 +217,79 @@ In multi-camera setups (e.g. two diagonal cameras in a living room):
 
 ---
 
-## 5. Mathematical Formulations & Feature Engineering
+## 5. 数学公式与特征工程
 
-### 5.1 Key landmark indices (COCO 17-point reference)
+### 5.1 关键地标索引（COCO 17 点格式参考）
 
-- **Nose**: 0 | **Eyes**: 1, 2 | **Ears**: 3, 4
-- **Shoulders**: 5 (left), 6 (right)
-- **Elbows**: 7, 8 | **Wrists**: 9, 10
-- **Hips**: 11 (left), 12 (right)
-- **Knees**: 13 (left), 14 (right)
-- **Ankles**: 15 (left), 16 (right)
+- **鼻子**: 0 | **眼睛**: 1, 2 | **耳朵**: 3, 4
+- **肩膀**: 5（左）, 6（右）
+- **手肘**: 7, 8 | **手腕**: 9, 10
+- **髋部**: 11（左）, 12（右）
+- **膝盖**: 13（左）, 14（右）
+- **脚踝**: 15（左）, 16（右）
 
-### 5.2 Core feature formulations
+### 5.2 核心特征公式
 
-#### 1. Mid-shoulder and mid-hip centroids
+#### 1. 肩部中点与髋部中点
 
 $$P_{shoulder}(t) = \frac{P_5(t) + P_6(t)}{2}, \quad P_{hip}(t) = \frac{P_{11}(t) + P_{12}(t)}{2}$$
 
-#### 2. Torso angle relative to the floor (`θ_torso`)
+#### 2. 躯干相对地面的角度（`θ_torso`）
 
-The vector connecting mid-hip to mid-shoulder:
+连接髋部中点与肩部中点的矢量：
 
 $$\vec{V}_{torso}(t) = P_{shoulder}(t) - P_{hip}(t) = \begin{bmatrix} x_s - x_h \\ y_s - y_h \end{bmatrix}$$
 
-The angle relative to the horizontal floor axis:
+`θ_torso` 相对水平地面的角度：
 
 $$\theta_{torso}(t) = \left| \arctan2\left(y_s - y_h, x_s - x_h\right) \right| \times \frac{180^\circ}{\pi}$$
 
-- Standing / walking: `θ_torso ≈ 70° - 90°`
-- Fallen / lying down: `θ_torso ≈ 0° - 30°`
+- 站立 / 行走：`θ_torso ≈ 70° - 90°`
+- 跌倒 / 平躺：`θ_torso ≈ 0° - 30°`
 
-#### 3. Normalized vertical centroid velocity (`V_y^norm`)
+#### 3. 归一化垂直质心速度（`V_y^norm`）
 
-Let `H_bbox(t)` be the bounding-box height:
+设 `H_bbox(t)` 为人的边界框高度：
 
 $$V_y^{norm}(t) = \frac{y_{hip}(t) - y_{hip}(t - \Delta t)}{\Delta t \cdot H_{bbox}(t)}$$
 
-A fall produces a prominent peak: `V_y^norm > τ_velocity_fall`.
+跌倒事件会产生明显的峰值：`V_y^norm > τ_velocity_fall`。
 
-#### 4. Aspect-ratio change rate (`ΔAR`)
+#### 4. 边界框纵横比变化率（`ΔAR`）
 
 $$AR(t) = \frac{\text{Width}(t)}{\text{Height}(t)}$$
 $$\Delta AR(t) = \frac{AR(t) - AR(t - \Delta t)}{\Delta t}$$
 
-- Standing: `AR ≈ 0.3 - 0.5`
-- Fallen: `AR ≥ 1.2 - 2.5`
+- 站立：`AR ≈ 0.3 - 0.5`
+- 跌倒：`AR ≥ 1.2 - 2.5`
 
-#### 5. Post-impact immobility metric (`M_inactivity`)
+#### 5. 落地后静止指标（`M_inactivity`）
 
-Computed over a moving window `W = [t_impact, t_impact + T]`:
+在滑动窗口 `W = [t_impact, t_impact + T]` 上计算：
 
 $$\mathcal{M}_{inactivity} = \frac{1}{|W|} \sum_{k \in W} \sum_{i \in V_{vis}} \| P_i(k) - P_i(k - 1) \|_2$$
 
-Immobility is confirmed when `M_inactivity < ε_stillness` for `T ≥ 10s`.
+当 `M_inactivity < ε_stillness` 且持续 `T ≥ 10 秒` 时，确认静止。
 
 ---
 
-## 6. Distinguishing Falls from Activities of Daily Living (ADLs)
+## 6. 区分跌倒与日常活动（ADL）
 
-A common problem in naive fall detectors is high false positives from everyday activities. The table below shows how the multi-stage architecture discriminates between true falls and common ADLs.
+朴素跌倒检测系统的一个常见问题是日常活动导致的高误报率。下表说明多阶段架构如何区分真实跌倒与常见日常活动：
 
-| Activity | Vertical velocity (`v_y`) | Torso angle (`θ_torso`) | Impact (`a_y`) | Post-event immobility | Occlusion profile | Decision |
+| 活动 | 垂直速度 (`v_y`) | 躯干角度 (`θ_torso`) | 冲击 (`a_y`) | 事件后静止 | 遮挡特征 | 系统判定 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Accidental fall** | **High spike (> 3.0g)** | **< 30° (horizontal)** | **Extreme** | **Prolonged (>10s)** | Often enters lower occlusion | **FALL CONFIRMED** |
-| **Sitting down on a chair** | Moderate / controlled | `60° - 85°` (upright) | Low / none | Normal minor movement | Torso remains visible | **Normal (ignore)** |
-| **Lying down on a bed** | Slow / gradual | `< 30°` (horizontal) | Very low | Still | Located in bed ROI zone | **Normal (bed ROI)** |
-| **Bending to pick up an object** | Moderate | `20° - 45°` | None | Very brief (< 3s) | Full recovery to standing | **Normal (quick return)** |
-| **Tying shoelaces** | Slow descent | `30° - 50°` | None | Continuous hand motion | Visible upper-body movement | **Normal (micro-motion)** |
-| **Stumble & quick recovery** | High spike | Dynamic | Moderate | Zero immobility | Stands up immediately | **Near-miss logged** |
-| **Fall behind sofa/bed** | **High initial spike** | **Lost / imputed flat** | **High** | **Vanished in occlusion ROI** | Sudden disappearance, no exit | **OCCLUDED FALL** |
+| **意外跌倒** | **高峰值（> 3.0g）** | **< 30°（水平）** | **剧烈** | **持续（>10s）** | 常进入下部遮挡区 | **FALL CONFIRMED** |
+| **坐到椅子上** | 中等 / 受控 | `60° - 85°`（直立） | 低 / 无 | 正常小幅移动 | 躯干保持可见 | **Normal（忽略）** |
+| **躺到床上** | 缓慢 / 渐进 | `< 30°`（水平） | 很低 | 静止 | 位于床 ROI 区域 | **Normal（床 ROI）** |
+| **弯腰拾物** | 中等 | `20° - 45°` | 无 | 很短暂（< 3s） | 完全恢复站立 | **Normal（快速恢复）** |
+| **系鞋带** | 缓慢下蹲 | `30° - 50°` | 无 | 持续手部动作 | 上半身可见移动 | **Normal（微动作）** |
+| **绊倒后迅速恢复** | 高峰值 | 动态 | 中等 | 无静止 | 立即起身 | **Near-Miss 记录** |
+| **倒在沙发/床后** | **高初始峰值** | **丢失 / 插补为平躺** | **高** | **在遮挡 ROI 内消失** | 突然消失且未出现 | **OCCLUDED FALL** |
 
 ---
 
-## 7. Software Architecture & Tech Stack
+## 7. 软件架构与推荐技术栈
 
 ```
                                 SYSTEM SOFTWARE STACK
@@ -317,18 +317,18 @@ A common problem in naive fall detectors is high false positives from everyday a
  └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Notes on the stack:
+技术栈说明：
 
-- **Application & UI**: React + TypeScript + Vite + TailwindCSS real-time dashboard; React Native / Flutter mobile notifications; WebRTC low-latency video/skeleton streaming.
-- **Services**: FastAPI backend, Redis/MQTT broker, metadata-only SQLite/PostgreSQL incident database.
-- **Inference**: PyTorch 2.x, ONNX Runtime, TensorRT; YOLO26n-Pose / YOLOv11s-Pose / RTMO; ByteTrack; ST-GCN/CTR-GCN classifier; OpenCV 4.x.
-- **Hardware**: Ubuntu / Debian / Windows 11; NVIDIA Jetson Orin, RTX 30/40 series, or Intel NUC.
+- **应用与界面**：React + TypeScript + Vite + TailwindCSS 实时仪表盘；React Native / Flutter 移动通知；WebRTC 低延迟视频/骨架流。
+- **服务与通信**：FastAPI 后端、Redis/MQTT 消息、SQLite/PostgreSQL 事件库（仅元数据）。
+- **推理与视觉**：PyTorch 2.x、ONNX Runtime、TensorRT；YOLO26n-Pose / YOLOv11s-Pose / RTMO 姿态；ByteTrack 跟踪；ST-GCN/CTR-GCN 分类器；OpenCV 4.x。
+- **硬件**：Ubuntu/Debian/Windows 11；NVIDIA Jetson Orin、RTX 30/40 系列或 Intel NUC。
 
 ---
 
-## 8. Directory & File Structure
+## 8. 实现目录与文件结构
 
-When implementation begins, the codebase will be structured as:
+实施阶段，代码库将按模块化组件组织：
 
 ```
 fall-detection-system/
@@ -400,9 +400,9 @@ fall-detection-system/
 
 ---
 
-## 9. State Machine Logic & Pseudocode
+## 9. 状态机逻辑与算法伪代码
 
-### 9.1 Multi-stage state transitions
+### 9.1 多阶段状态机转移
 
 ```mermaid
 stateDiagram-v2
@@ -429,7 +429,7 @@ stateDiagram-v2
     STATE_CONFIRMED_FALL --> [*]: Dispatch Alerts & Notify Caregivers
 ```
 
-### 9.2 Fall detection & occlusion engine pseudocode
+### 9.2 跌倒检测与遮挡处理引擎伪代码
 
 ```python
 """
@@ -643,53 +643,53 @@ class FallDetectionEngine:
         return False
 ```
 
-Notes on the pseudocode:
+伪代码说明：
 
-- The engine combines 17-point keypoints, per-person tracklets, and a sliding window to advance the state machine each frame.
-- Occluded joints are extrapolated from temporal momentum and kept as imputed points rather than zeroed.
-
----
-
-## 10. Privacy & Ethical Compliance
-
-Domestic monitoring must comply with strict privacy standards (e.g. GDPR Article 9, HIPAA):
-
-1. **Zero raw-video retention**:
-   - Raw frames live only in volatile RAM for immediate inference (<100 ms).
-   - Frames are destroyed immediately after keypoint extraction.
-2. **Anonymous stick-figure representation**:
-   - Caregivers receive vector skeletons or boxes instead of identifiable imagery.
-   - Preserves privacy in bedrooms and private quarters.
-3. **Local edge computing**:
-   - All inference runs locally on-site.
-   - Only lightweight metadata is transmitted (e.g. `{"event": "FALL", "timestamp": "2026-08-14T16:36:12Z", "confidence": 0.98}`).
-4. **Physical privacy indicator**: An onboard LED lights when the camera is actively processing.
+- 该引擎将 17 点关键点、多人轨迹（tracklet）与滑动窗口结合，逐帧推进状态机。
+- 遮挡关节通过时间动量外推并以插补形式保留，而非简单置零。
 
 ---
 
-## 11. Datasets & Benchmark Plan
+## 10. 隐私与合规
 
-### 11.1 Benchmark datasets
+对老人的居家监测必须符合严格的隐私标准（如 GDPR 第 9 条、HIPAA）：
 
-For evaluating and fine-tuning the pose estimator and spatio-temporal classifier:
-
-- **UR Fall Detection Dataset (URFD)**: 70 sequences (30 falls + 40 ADLs) with depth and RGB.
-- **Le2i Fall Detection Dataset**: Sequences for realistic home environments with varied lighting and occlusion.
-- **Multiple Camera Fall Dataset (MCFD)**: Multi-view sequences for testing occlusion recovery.
-- **NTU RGB+D 120**: Action-recognition benchmark with fall categories and 100+ ADLs for negatives.
-- **UP-Fall Detection Dataset**: Multimodal dataset combining vision with wearable IMUs.
-
-### 11.2 Target performance metrics
-
-- **Sensitivity (recall)**: `≥ 98.5%` (missing a real fall is critical).
-- **Specificity**: `≥ 99.0%` (minimizing alert fatigue).
-- **False alarm rate (FAR)**: `≤ 0.05` per 24 h of continuous monitoring.
-- **Alert latency**: `≤ 1.2 s` from end of immobility verification.
-- **Occlusion robustness**: `≥ 92.0%` detection rate when >50% of lower limbs are obscured.
+1. **零原始视频留存**：
+   - 原始视频帧仅存在于易失性内存中供即时推理（帧保留时间 `< 100ms`）。
+   - 关键点提取完成后立即销毁视频帧。
+2. **匿名火柴人表示**：
+   - 看护者和远程仪表盘接收的是矢量骨架动画或边界框，而非可识别的 RGB 图像。
+   - 保护卧室和私人起居空间等敏感区域的隐私。
+3. **本地边缘计算**：
+   - 所有 AI 推理在本地方设备上执行。
+   - 仅传输轻量遥测元数据（如 `{"event": "FALL", "timestamp": "2026-08-14T16:36:12Z", "confidence": 0.98}`）。
+4. **物理隐私指示灯**：当摄像头正在处理时，板载硬件 LED 指示灯亮起，确保透明度。
 
 ---
 
-## 12. Implementation Roadmap
+## 11. 数据集与模型基准计划
+
+### 11.1 基准数据集
+
+为评估和微调姿态估计器与时空动作分类器，可使用以下数据集：
+
+- **UR Fall Detection Dataset（URFD）**：70 个序列（30 个跌倒 + 40 个日常活动），包含深度与 RGB 数据。
+- **Le2i Fall Detection Dataset**：专为真实家庭环境设计的视频序列，涵盖各种光照和家具遮挡。
+- **Multiple Camera Fall Dataset（MCFD）**：多视角序列，适合测试跨角度的遮挡恢复。
+- **NTU RGB+D 120**：动作识别基准，包含跌倒类别及 100 多种日常活动，可用于负样本训练。
+- **UP-Fall Detection Dataset**：结合计算机视觉与可穿戴 IMU 传感器的多模态数据集。
+
+### 11.2 目标性能指标
+
+- **灵敏度（召回率）**：`≥ 98.5%`（漏检真实跌倒会产生严重后果）。
+- **特异性**：`≥ 99.0%`（减少看护者的报警疲劳）。
+- **误报率（FAR）**：连续监测 24 小时内 `≤ 0.05` 次误报。
+- **报警分派延迟**：静止验证结束后 `≤ 1.2 秒`。
+- **遮挡鲁棒性**：下肢超过 50% 被遮挡时，检出率 `≥ 92.0%`。
+
+---
+
+## 12. 实施路线图
 
 ```mermaid
 gantt
@@ -720,15 +720,15 @@ gantt
     Live Testing & False Alarm Tuning     :2026-10-19, 7d
 ```
 
-Phase overview: Foundation & ingestion → occlusion & kinematics → classification & state machine → backend/UI/alerting → optimization & edge deploy.
+阶段概述：基础视频采集 → 遮挡与运动学 → 分类与状态机 → 后端/界面/报警 → 优化与边缘部署。
 
 ---
 
-## 13. Summary & Next Steps
+## 13. 总结与后续步骤
 
-This specification defines a modern, occlusion-resilient, privacy-preserving fall detection architecture. When implementation begins, proceed through these stages:
+本规格定义了一套面向遮挡、保护隐私的现代化跌倒检测架构。开始实施后，可按以下阶段推进：
 
-1. Set up the environment (PyTorch, Ultralytics YOLO26/v11-Pose, ByteTrack, OpenCV).
-2. Build the real-time pose & occlusion imputation pipeline.
-3. Build the multi-stage state machine and test against simulated or benchmark clips.
-4. Develop the FastAPI streaming server and React dashboard.
+1. **搭建项目环境**（PyTorch、Ultralytics YOLO26/v11-Pose、ByteTrack、OpenCV）。
+2. **开发实时姿态与遮挡插补管线**。
+3. **构建多阶段跌倒状态机，并使用模拟或基准跌倒视频片段进行测试**。
+4. **开发 FastAPI 流媒体服务器与 React 监控仪表盘**。
