@@ -59,8 +59,8 @@ def select_custom_video() -> Optional[str]:
         if not os.path.basename(v).startswith("output_")
         and not os.path.basename(v).startswith("test")
         and not os.path.basename(v).startswith("live_")
-        and v != "demo_fall_with_occlusion.mp4"
-        and v != "fall_detection_output.mp4"
+        and os.path.basename(v) != "demo_fall_with_occlusion.mp4"
+        and os.path.basename(v) != "fall_detection_output.mp4"
         and os.path.getsize(v) > 1024
     ]
 
