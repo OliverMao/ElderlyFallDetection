@@ -122,7 +122,7 @@ Windows 下也可直接双击 `run.bat`。
 ├── sample_videos/                   # 基准跌倒测试数据集
 ├── test_generator.py                # 合成遮挡场景生成器
 ├── requirements.txt                 # 依赖清单
-├── FALL_DETECTION_SYSTEM_DESIGN.md  # 系统与数学设计文档
+├── DESIGN.md                        # 系统与数学设计文档（本地文件，不入库）
 └── README.md                        # 说明文档（英文版）
 ```
 
@@ -219,4 +219,4 @@ python main.py --source video.mp4 --imgsz 640 --threads 4
 
 ## 参考文档
 
-数学公式、生物力学算法、Kalman 滤波器状态方程及多视角单应矩阵等详细说明，参见 [FALL_DETECTION_SYSTEM_DESIGN.zh-CN.md](FALL_DETECTION_SYSTEM_DESIGN.zh-CN.md)。
+数学公式、生物力学算法、Kalman 滤波器状态方程及多视角单应矩阵等详细说明，参见 `DESIGN.zh-CN.md`（本地文件，不入库）。

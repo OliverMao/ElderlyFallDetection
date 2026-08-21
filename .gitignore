@@ -18,6 +18,9 @@ sample_videos/
 # Personal / Document Files
 Awais_Shah_Research_CV_R.docx
 *.docx
+# Design specification (local only, not tracked)
+DESIGN.md
+DESIGN.zh-CN.md
 
 # OS / IDE artifacts
 .DS_Store

@@ -26,7 +26,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CONFIG_DIR = os.path.join(PROJECT_ROOT, "configs")
 
 # Built-in defaults: guarantee the pipeline runs even if a config file or key is missing.
-# These mirror the values documented in FALL_DETECTION_SYSTEM_DESIGN.md.
+# These mirror the values documented in DESIGN.md.
 DEFAULTS: Dict[str, Any] = {
     "app": {
         "default_source": "demo",

@@ -122,7 +122,7 @@ The repo includes these benchmark fall clips:
 ├── sample_videos/                   # Benchmark test videos
 ├── test_generator.py                # Synthetic demo generator
 ├── requirements.txt                 # Dependencies
-├── FALL_DETECTION_SYSTEM_DESIGN.md  # Design specification
+├── DESIGN.md                        # Design specification (local only, not tracked in git)
 └── README.md                        # This document
 ```
 
@@ -219,4 +219,4 @@ For larger gains, consider ONNX Runtime / OpenVINO export.
 
 ## Reference
 
-See [FALL_DETECTION_SYSTEM_DESIGN.md](FALL_DETECTION_SYSTEM_DESIGN.md) for the mathematical formulations, biomechanical algorithms, Kalman state equations, and multi-view homography.
+See `DESIGN.md` (local file, not tracked in git) for the mathematical formulations, biomechanical algorithms, Kalman state equations, and multi-view homography.
