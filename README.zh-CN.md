@@ -106,6 +106,10 @@ Windows 下也可直接双击 `run.bat`。
 ```
 ├── run.bat                          # Windows 一键启动脚本
 ├── run.py                           # 交互式命令行运行器
+├── run_web.bat                      # Web 实时预览一键启动
+├── server.py                        # Web 预览服务器（FastAPI + WebSocket）
+├── templates/
+│   └── index.html                   # Web 界面（单文件，无需构建）
 ├── main.py                          # 命令行入口（run_pipeline）
 ├── configs/
 │   ├── app_config.yaml              # 管线参数与各模块阈值
@@ -142,6 +146,24 @@ python main.py --source sample_videos/standing_fall_1.mp4 --show --save output_r
 # 合成遮挡演示
 python main.py --source demo --show
 ```
+
+---
+
+## Web 实时预览
+
+除命令行外，系统还内置一个基于 WebSocket 的浏览器实时预览界面：
+
+```bash
+python server.py                          # http://127.0.0.1:8000
+python server.py --source demo --imgsz 480 --stride 2
+python server.py --host 0.0.0.0 --port 8080   # 向局域网开放
+```
+
+Windows 下可直接双击 `run_web.bat`。
+
+Web 界面支持：选择视频源（摄像头 / 合成演示 / `sample_videos/` 下的任意视频）、选择推理尺寸与帧步长、无终端启动/停止管线。实时显示 FPS、每个跟踪目标的状态（MONITORING → CONFIRMED_FALL）、躯干角、遮挡区域状态以及滚动报警日志。
+
+注意：同一时间只运行一个管线实例；启动时 CPU 加载模型约 10 秒。可用 `python _test_web.py` 对服务器做冒烟测试。
 
 ---
 

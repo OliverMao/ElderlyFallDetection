@@ -106,6 +106,10 @@ The repo includes these benchmark fall clips:
 ```
 ├── run.bat                          # One-click launcher
 ├── run.py                           # Interactive CLI runner
+├── run_web.bat                      # One-click web preview launcher
+├── server.py                        # Web preview server (FastAPI + WebSocket)
+├── templates/
+│   └── index.html                   # Web UI (self-contained, no build step)
 ├── main.py                          # CLI entry point (run_pipeline)
 ├── configs/
 │   ├── app_config.yaml              # Pipeline params & module thresholds
@@ -142,6 +146,24 @@ python main.py --source sample_videos/standing_fall_1.mp4 --show --save output_r
 # Synthetic occlusion demo
 python main.py --source demo --show
 ```
+
+---
+
+## Web real-time preview
+
+A browser-based live view of the pipeline (HUD frames + per-track state + alert log) is served over WebSocket:
+
+```bash
+python server.py                          # http://127.0.0.1:8000
+python server.py --source demo --imgsz 480 --stride 2
+python server.py --host 0.0.0.0 --port 8080   # expose to the local network
+```
+
+On Windows: double-click `run_web.bat`.
+
+The web UI lets you pick the source (webcam, synthetic demo, or any video file under `sample_videos/`), choose inference size / stride, and start/stop the pipeline without a terminal. It shows live FPS, per-track state (MONITORING → CONFIRMED_FALL), torso angle, occlusion-zone status, and a scrolling alert log.
+
+Note: one pipeline run at a time; the model loads ~10 s on CPU when a run starts. Smoke-test the server with `python _test_web.py`.
 
 ---
 

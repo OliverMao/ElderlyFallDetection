@@ -167,6 +167,7 @@ class FallDetectionPipeline:
                 bbox_history=track.bbox_history,
                 occlusion_stats=occ_stats
             )
+            track.last_features = features
 
             # Step 5: Advance State Machine
             state, state_info = self.state_machine.step(track, features, occ_stats)

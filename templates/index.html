@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 跌倒检测 · 实时预览</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2330;
+    --border: #2d333b;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #2f81f7;
+    --ok: #22c55e;
+    --warn: #eab308;
+    --orange: #f97316;
+    --red: #ef4444;
+    --red2: #dc2626;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted); flex: none;
+  }
+  .dot.running { background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: pulse 1.2s infinite; }
+  .dot.error   { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .dot.ended   { background: var(--warn); }
+  @keyframes pulse { 50% { opacity: .4; } }
+  .conn { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ---- video area ---- */
+  .video-wrap {
+    flex: 1; position: relative; display: flex;
+    align-items: center; justify-content: center; min-width: 0;
+    background: #000;
+  }
+  canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .placeholder {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    gap: 8px; align-items: center; justify-content: center;
+    color: var(--muted); pointer-events: none;
+  }
+  .placeholder .big { font-size: 15px; }
+  #alertBanner {
+    position: absolute; top: 0; left: 0; right: 0;
+    background: rgba(220, 38, 38, .92);
+    color: #fff; font-weight: 700; text-align: center;
+    padding: 10px 16px; font-size: 15px; letter-spacing: .5px;
+    transform: translateY(-100%); transition: transform .18s ease-out;
+  }
+  #alertBanner.show { transform: translateY(0); animation: blink 1s infinite; }
+  @keyframes blink { 50% { background: rgba(160, 20, 20, .92); } }
+  #fpsBadge {
+    position: absolute; left: 12px; bottom: 12px;
+    background: rgba(0,0,0,.55); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- sidebar ---- */
+  aside {
+    width: 330px; flex: none;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow-y: auto;
+  }
+  .sec { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .sec h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 10px;
+  }
+  select, input[type=text], button {
+    width: 100%; padding: 8px 10px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel2);
+    color: var(--text); font-size: 13px; outline: none;
+  }
+  select:focus, input[type=text]:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 8px; margin-top: 8px; }
+  .row > * { flex: 1; }
+  button { cursor: pointer; font-weight: 600; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  #btnStart { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #btnStop  { background: var(--panel2); color: var(--text); }
+  .kv { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; }
+  .kv b { font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+  .kv span { color: var(--muted); }
+
+  /* tracks */
+  .track {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
+  }
+  .track .tid { font-weight: 700; width: 20px; text-align: center; }
+  .badge {
+    font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+    white-space: nowrap;
+  }
+  .badge.MONITORING     { background: rgba(34,197,94,.15);  color: var(--ok); }
+  .badge.PRE_ALERT      { background: rgba(234,179,8,.15);  color: var(--warn); }
+  .badge.FALL_DETECTED  { background: rgba(249,115,22,.18); color: var(--orange); }
+  .badge.IMPACT         { background: rgba(239,68,68,.2);   color: var(--red); }
+  .badge.CONFIRMED_FALL { background: var(--red2);          color: #fff; }
+  .track .metrics { margin-left: auto; text-align: right; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .occ-tag { font-size: 10px; color: var(--warn); border: 1px solid var(--warn); border-radius: 4px; padding: 0 5px; }
+  .empty { color: var(--muted); font-size: 12px; text-align: center; padding: 12px 0; }
+
+  /* alert log */
+  #alertLog { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+  .log-item {
+    font-size: 12px; padding: 6px 8px; border-radius: 6px;
+    background: rgba(239,68,68,.1); border-left: 3px solid var(--red);
+  }
+  .log-item time { color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dot" id="stateDot"></div>
+  <h1>AI 跌倒检测 · 实时预览</h1>
+  <span class="sub">Fall Detection &amp; Occlusion Resilience</span>
+  <span class="conn" id="connLabel">未连接</span>
+</header>
+
+<main>
+  <div class="video-wrap">
+    <canvas id="video"></canvas>
+    <div class="placeholder" id="placeholder">
+      <div class="big">尚未启动管线</div>
+      <div>在右侧选择视频源，点击「启动」</div>
+    </div>
+    <div id="alertBanner"></div>
+    <div id="fpsBadge">-- FPS</div>
+  </div>
+
+  <aside>
+    <div class="sec">
+      <h2>视频源</h2>
+      <select id="sourceSelect">
+        <option value="0">摄像头 (Webcam 0)</option>
+        <option value="demo">演示 (合成遮挡视频)</option>
+      </select>
+      <div class="row">
+        <button id="btnStart">启动</button>
+        <button id="btnStop" disabled>停止</button>
+      </div>
+      <div class="row">
+        <label style="font-size:11px;color:var(--muted);align-self:center;flex:none">推理</label>
+        <select id="imgszSelect" style="flex:1">
+          <option value="0">配置默认</option>
+          <option value="320">320 (最快)</option>
+          <option value="480">480 (均衡)</option>
+          <option value="640">640 (最高精度)</option>
+        </select>
+        <select id="strideSelect" style="flex:1">
+          <option value="0">配置默认</option>
+          <option value="1">每帧推理</option>
+          <option value="2">每 2 帧 (×2)</option>
+          <option value="3">每 3 帧 (×3)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>状态</h2>
+      <div class="kv"><span>运行状态</span><b id="stState">IDLE</b></div>
+      <div class="kv"><span>视频源</span><b id="stSource">—</b></div>
+      <div class="kv"><span>已处理帧</span><b id="stFrames">0</b></div>
+      <div class="kv"><span>平均帧率</span><b id="stFps">—</b></div>
+      <div class="kv"><span>运行时长</span><b id="stUptime">—</b></div>
+      <div class="kv" id="stDetailRow" style="display:none"><span>详情</span><b id="stDetail" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b></div>
+    </div>
+
+    <div class="sec">
+      <h2>跟踪目标</h2>
+      <div id="trackList"><div class="empty">暂无跟踪目标</div></div>
+    </div>
+
+    <div class="sec" style="flex:1">
+      <h2>报警记录</h2>
+      <div id="alertLog"><div class="empty">暂无报警</div></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+const canvas = document.getElementById('video');
+const ctx = canvas.getContext('2d');
+const placeholder = document.getElementById('placeholder');
+const banner = document.getElementById('alertBanner');
+const fpsBadge = document.getElementById('fpsBadge');
+const stateDot = document.getElementById('stateDot');
+const connLabel = document.getElementById('connLabel');
+const sourceSelect = document.getElementById('sourceSelect');
+const imgszSelect = document.getElementById('imgszSelect');
+const strideSelect = document.getElementById('strideSelect');
+const btnStart = document.getElementById('btnStart');
+const btnStop = document.getElementById('btnStop');
+
+const STATE_LABEL = {
+  MONITORING: '监控中', PRE_ALERT: '预警', FALL_DETECTED: '疑似跌倒',
+  IMPACT: '撞击', CONFIRMED_FALL: '确认跌倒'
+};
+
+let ws = null, reconnectTimer = null, lastAlerts = [];
+let running = false;
+
+/* ---------- controls ---------- */
+async function api(path, body) {
+  const opt = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
+  const r = await fetch(path, opt);
+  return r.json();
+}
+
+btnStart.onclick = async () => {
+  const res = await api('/api/start', {
+    source: sourceSelect.value,
+    imgsz: parseInt(imgszSelect.value, 10),
+    stride: parseInt(strideSelect.value, 10)
+  });
+  if (!res.ok) alert(res.error || '启动失败');
+};
+btnStop.onclick = () => api('/api/stop');
+
+async function loadSources() {
+  try {
+    const s = await (await fetch('/api/sources')).json();
+    [...sourceSelect.querySelectorAll('option[data-video]')].forEach(o => o.remove());
+    for (const v of s.videos) {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = '视频文件: ' + v; o.dataset.video = 1;
+      sourceSelect.appendChild(o);
+    }
+  } catch (e) { /* server not up yet */ }
+}
+
+/* ---------- websocket ---------- */
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(proto + '://' + location.host + '/ws');
+
+  ws.onopen = () => {
+    connLabel.textContent = '已连接';
+    connLabel.style.color = 'var(--ok)';
+    placeholder.style.display = running ? 'none' : 'flex';
+  };
+  ws.onclose = () => {
+    connLabel.textContent = '连接断开，重连中…';
+    connLabel.style.color = 'var(--warn)';
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, 1500);
+  };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'frame') onFrame(msg);
+    else if (msg.type === 'state') onState(msg);
+  };
+}
+
+function onFrame(msg) {
+  running = true;
+  placeholder.style.display = 'none';
+  const img = new Image();
+  img.onload = () => {
+    if (canvas.width !== img.width || canvas.height !== img.height) {
+      canvas.width = img.width; canvas.height = img.height;
+    }
+    ctx.drawImage(img, 0, 0);
+  };
+  img.src = 'data:image/jpeg;base64,' + msg.jpeg;
+
+  const m = msg.meta;
+  fpsBadge.textContent = (m.fps || 0).toFixed(1) + ' FPS · 帧 ' + m.frame;
+  document.getElementById('stFrames').textContent = m.frame;
+  document.getElementById('stFps').textContent = (m.fps || 0).toFixed(1);
+  renderTracks(m.tracks || []);
+
+  // alerts
+  if (m.alerts && m.alerts.length) {
+    for (const a of m.alerts) {
+      const key = a.track_id + ':' + a.state;
+      if (!lastAlerts.some(x => x.key === key)) {
+        lastAlerts.unshift({ key, ...a });
+        addLog(a);
+      }
+    }
+    const worst = m.alerts.find(a => a.state === 'CONFIRMED_FALL') || m.alerts[0];
+    banner.textContent = '🚨 紧急报警 · Person #' + worst.track_id + ' — ' +
+      (STATE_LABEL[worst.state] || worst.state) + (worst.message ? ' · ' + worst.message : '');
+    banner.classList.add('show');
+    stateDot.className = 'dot error';
+  } else {
+    banner.classList.remove('show');
+    if (running) stateDot.className = 'dot running';
+  }
+}
+
+function onState(msg) {
+  running = msg.running;
+  document.getElementById('stState').textContent = msg.state || (msg.running ? 'RUNNING' : 'IDLE');
+  document.getElementById('stSource').textContent = msg.source || '—';
+  document.getElementById('stUptime').textContent = msg.uptime_sec ? msg.uptime_sec + ' s' : '—';
+  const detailRow = document.getElementById('stDetailRow');
+  if (msg.detail) { detailRow.style.display = 'flex'; document.getElementById('stDetail').textContent = msg.detail; }
+  else detailRow.style.display = 'none';
+
+  btnStart.disabled = msg.running;
+  btnStop.disabled = !msg.running;
+
+  if (msg.running) {
+    stateDot.className = 'dot running';
+    placeholder.style.display = 'none';
+  } else {
+    stateDot.className = 'dot' + (msg.state === 'ERROR' ? ' error' : msg.state === 'ENDED' ? ' ended' : '');
+    if (msg.state === 'ERROR') placeholder.style.display = 'flex',
+      placeholder.querySelector('.big').textContent = '错误: ' + (msg.detail || msg.state);
+    else if (msg.state === 'ENDED') placeholder.style.display = 'flex',
+      placeholder.querySelector('.big').textContent = '视频播放结束';
+    else { placeholder.style.display = 'flex'; placeholder.querySelector('.big').textContent = '尚未启动管线'; }
+    if (!msg.running) { banner.classList.remove('show'); renderTracks([]); }
+  }
+}
+
+function renderTracks(tracks) {
+  const box = document.getElementById('trackList');
+  if (!tracks.length) { box.innerHTML = '<div class="empty">暂无跟踪目标</div>'; return; }
+  box.innerHTML = tracks.map(t => {
+    const angle = t.torso_angle != null ? '躯干 ' + t.torso_angle + '°' : '';
+    const vy = t.vertical_velocity != null ? ' 垂直速度 ' + t.vertical_velocity.toFixed(2) : '';
+    return '<div class="track">' +
+      '<span class="tid">' + t.id + '</span>' +
+      '<span class="badge ' + t.state + '">' + (STATE_LABEL[t.state] || t.state) + '</span>' +
+      (t.in_occlusion_zone ? '<span class="occ-tag">遮挡: ' + (t.occ_zone_name || '') + '</span>' : '') +
+      '<span class="metrics">' + angle + '<br>' + vy + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+function addLog(a) {
+  const log = document.getElementById('alertLog');
+  const empty = log.querySelector('.empty');
+  if (empty) empty.remove();
+  const item = document.createElement('div');
+  item.className = 'log-item';
+  const now = new Date();
+  item.innerHTML = '<time>' + now.toTimeString().slice(0, 8) + '</time>' +
+    'Person #' + a.track_id + ' · ' + (STATE_LABEL[a.state] || a.state) +
+    (a.message ? ' — ' + a.message : '');
+  log.prepend(item);
+  while (log.children.length > 50) log.lastChild.remove();
+}
+
+loadSources();
+connect();
+</script>
+</body>
+</html>

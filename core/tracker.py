@@ -25,6 +25,7 @@ class Tracklet:
         self.state: str = "MONITORING"
         self.state_timer: float = 0.0
         self.pre_alert_countdown: float = 0.0
+        self.last_features: Optional[Dict[str, float]] = None   # kinematic features of the last processed frame
 
     def update(self, bbox: List[float], raw_kps: np.ndarray, imputed_kps: np.ndarray):
         self.bbox_history.append(bbox)
