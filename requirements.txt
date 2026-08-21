@@ -4,3 +4,4 @@ numpy>=1.23.0
 scipy>=1.10.0
 torch>=2.0.0
 torchvision>=0.15.0
+PyYAML>=6.0          # YAML config files (configs/app_config.yaml, model_config.yaml)

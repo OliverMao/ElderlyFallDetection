@@ -107,7 +107,12 @@ The repo includes these benchmark fall clips:
 ├── run.bat                          # One-click launcher
 ├── run.py                           # Interactive CLI runner
 ├── main.py                          # CLI entry point (run_pipeline)
+├── configs/
+│   ├── app_config.yaml              # Pipeline params & module thresholds
+│   ├── model_config.yaml            # Pose model weights & inference params
+│   └── zones_config.json            # Furniture occlusion zone polygons
 ├── core/
+│   ├── config.py                    # Config loader & default fallback
 │   ├── detector.py                  # Pose wrapper & keypoints
 │   ├── tracker.py                   # Multi-person tracklet manager
 │   ├── occlusion.py                 # Occlusion & imputation
@@ -140,6 +145,52 @@ python main.py --source demo --show
 
 ---
 
+## Configuration
+
+All thresholds and pipeline parameters live in `configs/` (no hard-coded magic numbers in the detection logic):
+
+| File | Scope |
+|---|---|
+| `app_config.yaml` | Pipeline defaults, tracker, occlusion engine, kinematics, fall state machine thresholds, named camera sources |
+| `model_config.yaml` | Pose model weights, confidence, `imgsz`, CPU threads, detection filter |
+| `zones_config.json` | Furniture occlusion zone polygons (pixel coordinates) |
+
+Precedence: **built-in defaults < config files < CLI arguments**. Missing files or keys fall back to built-in defaults, so the pipeline keeps working without `configs/`.
+
+```bash
+# Use an alternate config directory (e.g. per-camera tuning)
+python main.py --source 0 --show --config configs_room2
+```
+
+Typical tuning knobs:
+
+```yaml
+# configs/app_config.yaml
+state_machine:
+  fall_velocity_thresh: 1.2   # rapid descent trigger (h/s)
+  inactivity_sec: 4.0         # seconds prone before CONFIRMED_FALL
+  flat_angle_thresh: 55.0     # torso angle considered "flat" (deg)
+
+# configs/zones_config.json  - register a bed/sofa for real deployments
+"zones": [{ "name": "Bed", "type": "furniture", "polygon": [[...]] }]
+```
+
+Named camera sources can be referenced by short name:
+
+```yaml
+# configs/app_config.yaml
+app:
+  sources:
+    - name: "front_room"
+      url: "rtsp://192.168.1.100:554/stream1"
+```
+
+```bash
+python main.py --source front_room --show
+```
+
+---
+
 ## CPU performance tuning
 
 The pose model runs on CPU by default. Inference dominates; tune these options to trade a little accuracy/latency for throughput:
@@ -157,9 +208,9 @@ python main.py --source video.mp4 --imgsz 640 --threads 4
 
 | Option | Default | Description |
 |---|---|---|
-| `--imgsz` | `640` | Input size; smaller is faster but reduces accuracy on tiny subjects |
-| `--stride` | `1` | Run DNN every N frames and reuse keypoints in between |
-| `--threads` | `0` (auto) | CPU threads; small pose models parallelize poorly, `4` often beats all cores |
+| `--imgsz` | `0` (config: `640`) | Input size; smaller is faster but reduces accuracy on tiny subjects. Negative = auto on source size |
+| `--stride` | `0` (config: `1`) | Run DNN every N frames and reuse keypoints in between |
+| `--threads` | `0` (config: auto) | CPU threads; small pose models parallelize poorly, `4` often beats all cores |
 
 *Measured on a 16-core CPU: 640px=8.5 FPS → 480px+4 threads=10.7 FPS → 480px+stride2=17.3 FPS → 480px+stride3=21.3 FPS.*
 For larger gains, consider ONNX Runtime / OpenVINO export.

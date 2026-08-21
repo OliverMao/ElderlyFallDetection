@@ -27,7 +27,13 @@ class FallStateMachine:
         standing_angle_thresh: float = 70.0,
         inactivity_sec: float = 1.5,
         pre_alert_sec: float = 2.0,
-        stillness_energy_thresh: float = 25.0
+        stillness_energy_thresh: float = 25.0,
+        angular_collapse_thresh: float = 35.0,
+        slow_fall_velocity: float = 0.6,
+        occlusion_zone_velocity: float = 0.8,
+        flat_aspect_ratio: float = 0.85,
+        stand_up_velocity: float = -0.3,
+        recovery_motion_energy: float = 20.0
     ):
         self.fps = fps
         self.dt = 1.0 / max(fps, 1.0)
@@ -39,6 +45,14 @@ class FallStateMachine:
         self.inactivity_sec = inactivity_sec
         self.pre_alert_sec = pre_alert_sec
         self.stillness_energy_thresh = stillness_energy_thresh
+        
+        # Additional trigger/recovery thresholds (configurable via configs/app_config.yaml)
+        self.angular_collapse_thresh = angular_collapse_thresh
+        self.slow_fall_velocity = slow_fall_velocity
+        self.occlusion_zone_velocity = occlusion_zone_velocity
+        self.flat_aspect_ratio = flat_aspect_ratio
+        self.stand_up_velocity = stand_up_velocity
+        self.recovery_motion_energy = recovery_motion_energy
 
     def step(
         self,
@@ -60,9 +74,9 @@ class FallStateMachine:
         # A REAL Fall requires a dynamic event (rapid descent or fast angular collapse)
         is_dynamic_fall = (
             v_y > self.fall_velocity_thresh or
-            (angular_vel > 35.0 and angle < self.flat_angle_thresh) or
-            (v_y > 0.6 and angle < self.flat_angle_thresh) or
-            (in_occ_zone and v_y > 0.8)
+            (angular_vel > self.angular_collapse_thresh and angle < self.flat_angle_thresh) or
+            (v_y > self.slow_fall_velocity and angle < self.flat_angle_thresh) or
+            (in_occ_zone and v_y > self.occlusion_zone_velocity)
         )
 
         if is_dynamic_fall:
@@ -72,18 +86,18 @@ class FallStateMachine:
 
         elif current in [self.STATE_FALL_DETECTED, self.STATE_IMPACT]:
             tracklet.state_timer += self.dt
-            if angle < self.flat_angle_thresh or aspect_ratio > 0.85 or in_occ_zone:
+            if angle < self.flat_angle_thresh or aspect_ratio > self.flat_aspect_ratio or in_occ_zone:
                 if tracklet.state_timer >= self.inactivity_sec:
                     next_state = self.STATE_CONFIRMED_FALL
                     event_trigger = "[EMERGENCY] CONFIRMED EMERGENCY FALL ON GROUND"
                 else:
                     next_state = self.STATE_FALL_DETECTED
-            elif angle > self.standing_angle_thresh and v_y < -0.3:
+            elif angle > self.standing_angle_thresh and v_y < self.stand_up_velocity:
                 next_state = self.STATE_MONITORING
                 event_trigger = "Subject stood upright -> Reset"
 
         elif current == self.STATE_CONFIRMED_FALL:
-            if angle > self.standing_angle_thresh and stillness > 20.0:
+            if angle > self.standing_angle_thresh and stillness > self.recovery_motion_energy:
                 next_state = self.STATE_MONITORING
                 event_trigger = "Subject upright and moving -> Reset"
 

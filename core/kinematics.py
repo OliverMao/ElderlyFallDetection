@@ -13,9 +13,10 @@ class KinematicExtractor:
     Extracts physically explainable biomechanical features from temporal pose sequences.
     """
 
-    def __init__(self, fps: float = 30.0):
+    def __init__(self, fps: float = 30.0, stillness_window: int = 15):
         self.fps = fps
         self.dt = 1.0 / max(fps, 1.0)
+        self.stillness_window = int(stillness_window)
 
     def extract_features(
         self,
@@ -68,8 +69,8 @@ class KinematicExtractor:
         else:
             ar_delta = 0.0
 
-        # 5. Stillness Energy over recent window (last 10-15 frames)
-        stillness_energy = self.calculate_stillness_energy(keypoints_history, window=15)
+        # 5. Stillness Energy over recent window
+        stillness_energy = self.calculate_stillness_energy(keypoints_history, window=self.stillness_window)
 
         # 6. Angular Collapse Rate (degrees per second)
         angular_vel = 0.0

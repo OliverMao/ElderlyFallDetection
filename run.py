@@ -120,8 +120,7 @@ def main():
         run_pipeline(
             source=args.source,
             save_path="fall_detection_output.mp4",
-            show=True,
-            conf=0.35
+            show=True
         )
         return
 
@@ -163,8 +162,7 @@ def main():
             run_pipeline(
                 source=source,
                 save_path=save_file,
-                show=show_window,
-                conf=0.35
+                show=show_window
             )
         except Exception as e:
             print(f"\n❌ Error during execution: {e}")

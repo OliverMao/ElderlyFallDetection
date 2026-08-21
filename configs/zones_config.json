@@ -1,0 +1,11 @@
+{
+  "_readme": "遮挡区域配置 (Occlusion Zone Configuration)。polygon 为视频像素坐标的多边形顶点 [[x1,y1], [x2,y2], ...]，须与视频分辨率匹配。source 字段为 fnmatch 通配符，匹配输入源时该区域生效；省略 source 则对所有源生效。真实部署时在此登记床、沙发、桌子等家具的遮挡范围。",
+  "zones": [
+    {
+      "name": "Coffee Table",
+      "type": "furniture",
+      "source": "demo*",
+      "polygon": [[300, 310], [620, 310], [620, 440], [300, 440]]
+    }
+  ]
+}

@@ -27,14 +27,32 @@ class OcclusionEngine:
     TORSO_INDICES = [5, 6, 11, 12]
     LOWER_BODY_INDICES = [13, 14, 15, 16]
 
-    def __init__(self, conf_threshold: float = 0.25, max_extrapolation_frames: int = 15):
+    def __init__(self, conf_threshold: float = 0.25, max_extrapolation_frames: int = 15,
+                 extrapolation_damping: float = 0.9, synthetic_conf: float = 0.45,
+                 bone_prior_conf: float = 0.35, knee_offset_ratio: float = 0.30,
+                 ankle_offset_ratio: float = 0.25, severe_max_visible: int = 5,
+                 min_visible_for_partial: int = 5):
         """
         Args:
             conf_threshold: Landmark confidence below which a point is deemed occluded.
             max_extrapolation_frames: Max frames to extrapolate a lost joint before resetting.
+            extrapolation_damping: Per-frame damping factor applied to extrapolation velocity.
+            synthetic_conf: Confidence label assigned to temporally extrapolated joints.
+            bone_prior_conf: Confidence label assigned to bone-prior synthesized joints.
+            knee_offset_ratio: Knee offset below hip as a fraction of bbox height.
+            ankle_offset_ratio: Ankle offset below knee as a fraction of bbox height.
+            severe_max_visible: Fewer visible joints than this => severe occlusion.
+            min_visible_for_partial: Visible joints at or above this => partial occlusion.
         """
         self.conf_threshold = conf_threshold
         self.max_extrapolation_frames = max_extrapolation_frames
+        self.extrapolation_damping = float(extrapolation_damping)
+        self.synthetic_conf = float(synthetic_conf)
+        self.bone_prior_conf = float(bone_prior_conf)
+        self.knee_offset_ratio = float(knee_offset_ratio)
+        self.ankle_offset_ratio = float(ankle_offset_ratio)
+        self.severe_max_visible = int(severe_max_visible)
+        self.min_visible_for_partial = int(min_visible_for_partial)
         self.occlusion_zones: List[Dict[str, Any]] = []
 
     def add_occlusion_zone(self, name: str, polygon: List[Tuple[int, int]], zone_type: str = "furniture"):
@@ -90,43 +108,43 @@ class OcclusionEngine:
                         vx = prev_kps[i, 0] - prev_prev_kps[i, 0]
                         vy = prev_kps[i, 1] - prev_prev_kps[i, 1]
                         
-                        # Apply damping factor (0.9) to prevent runaway extrapolation
-                        extrapolated_x = prev_kps[i, 0] + vx * 0.9
-                        extrapolated_y = prev_kps[i, 1] + vy * 0.9
+                        # Apply damping factor to prevent runaway extrapolation
+                        extrapolated_x = prev_kps[i, 0] + vx * self.extrapolation_damping
+                        extrapolated_y = prev_kps[i, 1] + vy * self.extrapolation_damping
                         
                         imputed_kps[i, 0] = extrapolated_x
                         imputed_kps[i, 1] = extrapolated_y
-                        imputed_kps[i, 2] = 0.45  # Mark as synthetic confidence
+                        imputed_kps[i, 2] = self.synthetic_conf  # Mark as synthetic confidence
 
         # 4. Bone Constraint Validation for Missing Lower Limbs
         # If knees or ankles are missing but hips are visible, synthesize approximate neutral orientation
         if occlusion_mask[13] and not occlusion_mask[11]:  # Left Knee missing, Left Hip visible
             imputed_kps[13, 0] = imputed_kps[11, 0]
-            imputed_kps[13, 1] = imputed_kps[11, 1] + (bbox[3] - bbox[1]) * 0.3
-            imputed_kps[13, 2] = 0.35
+            imputed_kps[13, 1] = imputed_kps[11, 1] + (bbox[3] - bbox[1]) * self.knee_offset_ratio
+            imputed_kps[13, 2] = self.bone_prior_conf
             
         if occlusion_mask[14] and not occlusion_mask[12]:  # Right Knee missing, Right Hip visible
             imputed_kps[14, 0] = imputed_kps[12, 0]
-            imputed_kps[14, 1] = imputed_kps[12, 1] + (bbox[3] - bbox[1]) * 0.3
-            imputed_kps[14, 2] = 0.35
+            imputed_kps[14, 1] = imputed_kps[12, 1] + (bbox[3] - bbox[1]) * self.knee_offset_ratio
+            imputed_kps[14, 2] = self.bone_prior_conf
 
         if occlusion_mask[15] and imputed_kps[13, 1] > 0:  # Left Ankle
             imputed_kps[15, 0] = imputed_kps[13, 0]
-            imputed_kps[15, 1] = imputed_kps[13, 1] + (bbox[3] - bbox[1]) * 0.25
-            imputed_kps[15, 2] = 0.35
+            imputed_kps[15, 1] = imputed_kps[13, 1] + (bbox[3] - bbox[1]) * self.ankle_offset_ratio
+            imputed_kps[15, 2] = self.bone_prior_conf
 
         if occlusion_mask[16] and imputed_kps[14, 1] > 0:  # Right Ankle
             imputed_kps[16, 0] = imputed_kps[14, 0]
-            imputed_kps[16, 1] = imputed_kps[14, 1] + (bbox[3] - bbox[1]) * 0.25
-            imputed_kps[16, 2] = 0.35
+            imputed_kps[16, 1] = imputed_kps[14, 1] + (bbox[3] - bbox[1]) * self.ankle_offset_ratio
+            imputed_kps[16, 2] = self.bone_prior_conf
 
         stats = {
             "total_visibility": float(visible_total / total_kps),
             "upper_body_visibility": float(upper_vis),
             "lower_body_visibility": float(lower_vis),
             "torso_visibility": float(torso_vis),
-            "is_partially_occluded": bool(visible_total < total_kps and visible_total >= 5),
-            "is_severely_occluded": bool(visible_total < 5)
+            "is_partially_occluded": bool(visible_total < total_kps and visible_total >= self.min_visible_for_partial),
+            "is_severely_occluded": bool(visible_total < self.severe_max_visible)
         }
 
         return imputed_kps, occlusion_mask, stats

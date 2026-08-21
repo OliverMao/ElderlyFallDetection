@@ -34,7 +34,9 @@ class PoseDetector:
         "right_ankle"    # 16
     ]
 
-    def __init__(self, model_name: str = "yolo26n-pose.pt", conf_thresh: float = 0.35, device: Optional[str] = None, imgsz: int = 640, num_threads: Optional[int] = None):
+    def __init__(self, model_name: str = "yolo26n-pose.pt", conf_thresh: float = 0.35, device: Optional[str] = None, imgsz: int = 640, num_threads: Optional[int] = None,
+                 min_visible_joints: int = 4, keypoint_conf: float = 0.35,
+                 min_bbox_w: int = 20, min_bbox_h: int = 30):
         """
         Args:
             model_name: YOLO pose model path/name (default: lightweight yolo26n-pose.pt)
@@ -44,9 +46,18 @@ class PoseDetector:
                    substantially (e.g. 320 >> 640). Set 0 to auto-ease on source size.
             num_threads: Torch CPU threads. On small pose models, fewer threads (1-4) often
                          beat the default all-core setting due to thread contention.
+            min_visible_joints: Minimum number of confident joints for a detection to be kept
+            keypoint_conf: Minimum per-joint confidence counted as "visible"
+            min_bbox_w / min_bbox_h: Minimum bounding-box size (pixels) to accept a detection
         """
         self.conf_thresh = conf_thresh
         self.imgsz = int(imgsz) if imgsz else 640
+
+        # Detection filter parameters (configurable via configs/model_config.yaml)
+        self.min_visible_joints = int(min_visible_joints)
+        self.keypoint_conf = float(keypoint_conf)
+        self.min_bbox_w = int(min_bbox_w)
+        self.min_bbox_h = int(min_bbox_h)
         
         # Expose an override hook so the pipeline can adapt imgsz at runtime
         self._pipeline_imgsz: Optional[int] = None
@@ -123,13 +134,13 @@ class PoseDetector:
                 kps_with_conf[:, 2] = np.where((kps[:, 0] > 0) | (kps[:, 1] > 0), det_conf, 0.0)
                 kps = kps_with_conf
 
-            # Filter out spurious false positives with fewer than 4 visible joints
-            confident_joints = np.sum((kps[:, 2] > 0.35) & (kps[:, 0] > 0) & (kps[:, 1] > 0))
+            # Filter out spurious false positives with fewer than the required visible joints
+            confident_joints = np.sum((kps[:, 2] > self.keypoint_conf) & (kps[:, 0] > 0) & (kps[:, 1] > 0))
             bbox_w = bbox[2] - bbox[0]
             bbox_h = bbox[3] - bbox[1]
 
             # Reject tiny or low-joint noise
-            if confident_joints < 4 or bbox_w < 20 or bbox_h < 30:
+            if confident_joints < self.min_visible_joints or bbox_w < self.min_bbox_w or bbox_h < self.min_bbox_h:
                 continue
 
             detections.append({

@@ -45,9 +45,10 @@ class SimpleTracker:
     """
     Fast IoU and Centroid-based tracker to maintain tracklet continuity.
     """
-    def __init__(self, iou_thresh: float = 0.3, max_missing: int = 20):
+    def __init__(self, iou_thresh: float = 0.3, max_missing: int = 20, max_history: int = 60):
         self.iou_thresh = iou_thresh
         self.max_missing = max_missing
+        self.max_history = max_history
         self.tracklets: Dict[int, Tracklet] = {}
         self.next_id: int = 1
 
@@ -91,7 +92,7 @@ class SimpleTracker:
         # Create new tracklets for unmatched detections
         for idx, det_bbox in enumerate(det_bboxes):
             if idx not in matched_dets:
-                new_track = Tracklet(self.next_id, det_bbox, det_kps[idx])
+                new_track = Tracklet(self.next_id, det_bbox, det_kps[idx], max_history=self.max_history)
                 self.tracklets[self.next_id] = new_track
                 self.next_id += 1
 

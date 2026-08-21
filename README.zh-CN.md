@@ -107,7 +107,12 @@ Windows 下也可直接双击 `run.bat`。
 ├── run.bat                          # Windows 一键启动脚本
 ├── run.py                           # 交互式命令行运行器
 ├── main.py                          # 命令行入口（run_pipeline）
+├── configs/
+│   ├── app_config.yaml              # 管线参数与各模块阈值
+│   ├── model_config.yaml            # 姿态模型权重与推理参数
+│   └── zones_config.json            # 家具遮挡区域多边形
 ├── core/
+│   ├── config.py                    # 配置加载与默认值回退
 │   ├── detector.py                  # YOLO26-Pose 封装与关键点提取
 │   ├── tracker.py                   # 多人时间轨迹管理
 │   ├── occlusion.py                 # 遮挡引擎：外推与骨骼插补
@@ -140,6 +145,52 @@ python main.py --source demo --show
 
 ---
 
+## 配置化
+
+所有阈值与管线参数集中在 `configs/` 目录（检测逻辑中不再硬编码魔法数字）：
+
+| 文件 | 作用域 |
+|---|---|
+| `app_config.yaml` | 管线默认值、跟踪器、遮挡引擎、运动学、跌倒状态机阈值、命名摄像头源 |
+| `model_config.yaml` | 姿态模型权重、置信度、`imgsz`、CPU 线程数、检测过滤参数 |
+| `zones_config.json` | 家具遮挡区域多边形（像素坐标） |
+
+优先级：**内置默认值 < 配置文件 < 命令行参数**。配置文件或字段缺失时回退到内置默认值，即使没有 `configs/` 目录管线也能正常运行。
+
+```bash
+# 使用另一套配置目录（例如针对不同摄像头分别调参）
+python main.py --source 0 --show --config configs_room2
+```
+
+常用调参项：
+
+```yaml
+# configs/app_config.yaml
+state_machine:
+  fall_velocity_thresh: 1.2   # 快速下坠触发阈值 (h/s)
+  inactivity_sec: 4.0         # 倒地后维持多少秒确认跌倒
+  flat_angle_thresh: 55.0     # 视为躺倒的躯干角上限 (°)
+
+# configs/zones_config.json  - 真实部署时登记床/沙发等家具
+"zones": [{ "name": "Bed", "type": "furniture", "polygon": [[...]] }]
+```
+
+支持在配置中登记命名摄像头源，命令行直接用名称引用：
+
+```yaml
+# configs/app_config.yaml
+app:
+  sources:
+    - name: "front_room"
+      url: "rtsp://192.168.1.100:554/stream1"
+```
+
+```bash
+python main.py --source front_room --show
+```
+
+---
+
 ## CPU 性能调优
 
 姿态模型默认在 CPU 上运行。推理是主要的性能开销，可通过以下参数在精度与吞吐量之间权衡：
@@ -157,9 +208,9 @@ python main.py --source video.mp4 --imgsz 640 --threads 4
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--imgsz` | `640` | 推理输入尺寸。`480`/`320` 可显著提升 CPU 推理速度，但过小会降低小目标的精度 |
-| `--stride` | `1` | 每 N 帧运行一次推理，其余帧复用上次关键点。`2`-`3` 可近似线性提升帧率 |
-| `--threads` | `0`（自动） | Torch CPU 线程数。小姿态模型并行效率差，`4` 通常优于默认的全核配置 |
+| `--imgsz` | `0`（取配置值 `640`） | 推理输入尺寸。`480`/`320` 可显著提升 CPU 推理速度，但过小会降低小目标的精度；负值 = 按源分辨率自动 |
+| `--stride` | `0`（取配置值 `1`） | 每 N 帧运行一次推理，其余帧复用上次关键点。`2`-`3` 可近似线性提升帧率 |
+| `--threads` | `0`（取配置值/自动） | Torch CPU 线程数。小姿态模型并行效率差，`4` 通常优于默认的全核配置 |
 
 *实测（16 核 CPU）：640px=8.5 FPS → 480px+4线程=10.7 FPS → 480px+stride2=17.3 FPS → 480px+stride3=21.3 FPS。*
 如需更大提升，可考虑导出为 ONNX Runtime / OpenVINO 推理。

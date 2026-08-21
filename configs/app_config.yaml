@@ -1,0 +1,102 @@
+# ============================================================
+# 应用配置 (Application Configuration)
+# 管线运行参数与各模块阈值
+# 优先级: 内置默认值 < 本文件 < 命令行参数
+# ============================================================
+
+app:
+  # 默认输入源: "demo" | 视频文件路径 | 摄像头序号 ("0") | sources 中的名称
+  default_source: "demo"
+  # 预定义输入源（命令行 --source 可用 name 引用）
+  # sources:
+  #   - name: "front_room"
+  #     url: "rtsp://192.168.1.100:554/stream1"
+  #   - name: "bedroom_cam"
+  #     url: "0"
+  # 默认输出视频路径（--save 未指定时）
+  output_save_path: "fall_detection_output.mp4"
+  # 输出视频编码
+  fourcc: "mp4v"
+  # 无法从源获取帧率时的默认值
+  default_fps: 30.0
+  # 推理步长: 每 N 帧运行一次 DNN，其余帧复用上次检测结果 (1 = 每帧都推理)
+  stride: 1
+  # 显示窗口
+  window_name: "AI Fall Detection & Occlusion Resilience"
+  # 显示窗口最大宽度（像素），按源比例缩放
+  window_max_width: 1024
+
+# ------------------------------------------------------------
+# 多目标跟踪器 (core/tracker.py)
+# ------------------------------------------------------------
+tracker:
+  # IoU 匹配阈值: 检测框与已有轨迹的最低 IoU
+  iou_thresh: 0.25
+  # 轨迹允许丢失的最大帧数（超过则删除该轨迹）
+  max_missing: 20
+  # 每人历史缓冲帧数（用于运动学计算窗口）
+  max_history: 60
+
+# ------------------------------------------------------------
+# 遮挡处理引擎 (core/occlusion.py)
+# ------------------------------------------------------------
+occlusion:
+  # 关键点置信度低于该值视为被遮挡
+  conf_threshold: 0.25
+  # 单关节速度外推的最大帧数
+  max_extrapolation_frames: 15
+  # 速度外推阻尼系数（0.9 = 每帧衰减 10%，防止外推发散）
+  extrapolation_damping: 0.9
+  # 时间外推合成点的置信度标记值
+  synthetic_conf: 0.45
+  # 骨骼先验合成点（膝/踝）的置信度标记值
+  bone_prior_conf: 0.35
+  # 骨骼先验: 膝关节相对髋关节的垂直偏移（边界框高度比例）
+  knee_offset_ratio: 0.30
+  # 骨骼先验: 踝关节相对膝关节的垂直偏移（边界框高度比例）
+  ankle_offset_ratio: 0.25
+  # 可见关节数 < 该值 => 严重遮挡
+  severe_max_visible: 5
+  # 可见关节数 >= 该值 => 部分遮挡
+  min_visible_for_partial: 5
+
+# ------------------------------------------------------------
+# 运动学特征提取 (core/kinematics.py)
+# ------------------------------------------------------------
+kinematics:
+  # 静止能量 (stillness energy) 计算窗口（帧）
+  stillness_window: 15
+
+# ------------------------------------------------------------
+# 多阶段跌倒状态机 (core/state_machine.py)
+# 触发条件: 满足任一即进入 FALL_DETECTED
+#   v_y > fall_velocity_thresh
+#   OR (角速度 > angular_collapse_thresh AND 躯干角 < flat_angle_thresh)
+#   OR (v_y > slow_fall_velocity AND 躯干角 < flat_angle_thresh)
+#   OR (位于遮挡区 AND v_y > occlusion_zone_velocity)
+# ------------------------------------------------------------
+state_machine:
+  # 快速下坠: 垂直速度阈值 (h/s, 按边界框高度归一化)
+  fall_velocity_thresh: 1.2
+  # 姿态快速坍塌: 角速度阈值 (°/s)
+  angular_collapse_thresh: 35.0
+  # 慢速倾倒: 低速度但躯干已接近水平时的速度下限 (h/s)
+  slow_fall_velocity: 0.6
+  # 遮挡区下坠: 位于家具遮挡区内的速度阈值 (h/s)
+  occlusion_zone_velocity: 0.8
+  # 平躺判定: 躯干角低于该值 (°)
+  flat_angle_thresh: 55.0
+  # 站立判定: 躯干角高于该值 (°)
+  standing_angle_thresh: 70.0
+  # 落地后保持倒地姿态多少秒确认跌倒 (秒)
+  inactivity_sec: 4.0
+  # 预报警倒计时 (秒, 预留字段, 当前未启用)
+  pre_alert_sec: 5.0
+  # 静止能量阈值（当前实现中保留, 供报警确认阶段使用）
+  stillness_energy_thresh: 25.0
+  # 确认倒地: 边界框纵横比 (宽/高) 超过该值视为躺倒
+  flat_aspect_ratio: 0.85
+  # 恢复判定: 向上速度阈值 (h/s, 负值 = 向上)
+  stand_up_velocity: -0.3
+  # 恢复判定: 需伴随的运动能量下限（避免躺倒静止被误判为起身）
+  recovery_motion_energy: 20.0
