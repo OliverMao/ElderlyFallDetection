@@ -1,70 +1,72 @@
-# 🛡️ Real-Time Person & Elderly Fall Detection System
-### Advanced Occlusion Resilience, Kinematic State Machine & Edge AI Architecture
+# Real-Time Person & Elderly Fall Detection System
 
-An enterprise-grade, edge-compatible AI computer vision system designed to detect accidental falls in real-time under severe visual occlusions (behind furniture, tables, beds, couches) while completely eliminating false positives from daily activities such as sitting down, tying shoelaces, or sleeping in bed.
+一个面向边缘计算、基于姿态估计（Pose Estimation）的实时跌倒检测系统。系统在严重遮挡场景（如家具、桌子、床、沙发背后）下检测跌倒，并通过多阶段状态机区分跌倒与日常生活活动（坐下、系鞋带、卧床休息等），以降低误报。
 
----
-
-## 🌟 Key Highlights
-
-- **⚡ Instant-Trigger Fall Detection**: Detects human falls the millisecond a rapid descent ($v_y > 0.7\text{ h/s}$) or posture collapse ($\Delta \theta / \Delta t > 35^\circ/\text{s}$) occurs, triggering immediate visual and dispatch alerts.
-- **🛏️ Smart Resting / Sleeping False-Alarm Rejection**: Biomechanically differentiates between an accidental fall and peaceful horizontal resting/sleeping on a bed (`MONITORING (RESTING)` in calm green, zero false sirens).
-- **👁️ 4-Tier Occlusion Resilience**:
-  1. **Kinematic Bone Constraint Imputation**: Mathematically reconstructs blocked knees and ankles using anatomical anthropometric ratios.
-  2. **Temporal Velocity Extrapolation**: Carries momentum vectors through visual blockages.
-  3. **Furniture ROI Tracking**: Monitors trajectories descending behind known occlusion barriers (coffee tables, beds, sofas).
-  4. **Proximity & Bone Length Clamping**: Enforces strict skeletal bounds to eliminate spurious spiderweb lines.
-- **🚀 100% Edge CPU Ready**: Powered by a lightweight pose estimation engine (~6.5 MB). Runs at full speed on standard CPUs without requiring a dedicated GPU or custom model training.
-- **🔄 Continuous Interactive Runner**: One-click launcher with auto-looping menu, video auto-discovery, and drag-and-drop support.
+系统基于 [Ultralytics YOLO26-Pose](https://github.com/ultralytics/ultralytics) 提取 17 个 COCO 关键点，在纯 CPU 上即可运行，无需独立 GPU。
 
 ---
 
-## 🚀 Quickstart Guide (1 Command to Run)
+## 特性
 
-You only need **ONE** command:
+- **瞬时触发检测**：当发生快速下坠（垂直速度 `v_y > 0.7 h/s`）或姿态快速坍塌（`Δθ/Δt > 35°/s`）时立即触发报警。
+- **误报抑制**：在生物力学层面区分意外跌倒与平躺休息/睡眠，避免日常活动触发误报。
+- **四级遮挡复原**：
+  1. 骨骼约束插补：依据人体解剖比例重建被遮挡的膝盖、脚踝。
+  2. 时间速度外推：在视觉遮挡期间延续运动矢量。
+  3. 家具区域跟踪：跟踪进入已知遮挡区域（咖啡桌、床、沙发）的下坠轨迹。
+  4. 邻近与骨骼长度约束：限制骨架边界，剔除异常连线。
+- **轻量模型**：姿态估计模型约 6.5 MB，可在普通 CPU 上以合理帧率运行，无需训练自定义模型。
+- **交互式运行器**：命令行交互菜单，支持视频自动发现与拖拽文件。
+
+---
+
+## 快速开始
+
+只需一条命令：
 
 ```bash
 python run.py
 ```
-*(Or on Windows, simply double-click **`run.bat`**)*
 
-### 🎮 Interactive Menu Options:
+Windows 下也可直接双击 `run.bat`。
+
+### 交互菜单
 
 ```text
 ======================================================================
-  🛡️  AI PERSON & ELDERLY FALL DETECTION SYSTEM
+  AI PERSON & ELDERLY FALL DETECTION SYSTEM
   Advanced Occlusion Resilience & Kinematic Tracking
 ======================================================================
   Select an input option:
-   [1] 📹 Live Webcam (Real-time monitoring)
-   [2] 📁 Custom Video File (Auto-detects videos + Drag & Drop)
-   [3] 🧪 Synthetic Occlusion Fall Demo (Built-in test)
-   [4] ❌ Exit
+   [1] Live Webcam (Real-time monitoring)
+   [2] Custom Video File (Auto-detects videos + Drag & Drop)
+   [3] Synthetic Occlusion Fall Demo (Built-in test)
+   [4] Exit
 ======================================================================
 ```
 
-- **Option [1] (Webcam)**: Streams live camera feed with real-time skeleton tracking and HUD telemetry.
-- **Option [2] (Custom Video)**: Automatically lists all available test videos and benchmark clips with one-key selection (`1`, `2`, `3`, `4`, `5`), or accepts any drag-and-dropped `.mp4` / `.avi` file.
-- **Option [3] (Synthetic Demo)**: Generates and executes a synthetic scenario of a person walking and falling behind an occlusion barrier.
-- **Option [4] (Exit)**: Safely closes the application.
+- 选项 1（摄像头）：实时采集摄像头画面，叠加骨架与遥测信息。
+- 选项 2（视频文件）：自动列出目录内的测试视频，支持数字键选择，或直接拖入 `.mp4` / `.avi` 文件。
+- 选项 3（合成演示）：生成并播放一段包含遮挡场景的合成跌倒演示。
+- 选项 4（退出）：关闭程序。
 
 ---
 
-## 📦 Included Benchmark Video Suite (`sample_videos/`)
+## 自带基准视频（`sample_videos/`）
 
-The repository includes real-world benchmark fall test videos:
+仓库包含以下基准跌倒测试视频：
 
-| # | Video File | Scenario & Purpose | Expected Result |
+| 编号 | 视频文件 | 场景与用途 | 预期结果 |
 |---|---|---|---|
-| **1** | `sample_videos/standing_fall_1.mp4` | 🏃 Sudden collapse fall from standing | Instant `[ALERT] FALL DETECTED` |
-| **2** | `sample_videos/standing_fall_2.mp4` | 🍌 Slip & backward fall from standing | Instant `[ALERT] FALL DETECTED` |
-| **3** | `sample_videos/sitting_to_fall.mp4` | 🪑 Senior citizen falling off chair | Instant `[ALERT] FALL DETECTED` |
-| **4** | `sample_videos/bed_rollout_fall.mp4` | 🛏️ Roll-out fall from bed onto floor | Instant `[ALERT] FALL DETECTED` |
-| **5** | `sample_videos/normal_activity_no_fall.mp4` | 🚶 Walking, sitting & sleeping (ADL) | `MONITORING (RESTING)` (Zero False Alarms) |
+| 1 | `sample_videos/standing_fall_1.mp4` | 站立状态下骤然跌倒 | 触发 `[ALERT] FALL DETECTED` |
+| 2 | `sample_videos/standing_fall_2.mp4` | 站立状态下滑倒、后仰 | 触发 `[ALERT] FALL DETECTED` |
+| 3 | `sample_videos/sitting_to_fall.mp4` | 老人从椅子上跌落 | 触发 `[ALERT] FALL DETECTED` |
+| 4 | `sample_videos/bed_rollout_fall.mp4` | 从床上滚落 | 触发 `[ALERT] FALL DETECTED` |
+| 5 | `sample_videos/normal_activity_no_fall.mp4` | 行走、坐下、睡眠等日常活动（对比基线） | 保持 `MONITORING (RESTING)`，不误报 |
 
 ---
 
-## 🧠 Technical Architecture & Biomechanical Pipeline
+## 技术架构与处理流程
 
 ```
   ┌─────────────────┐     ┌──────────────────────┐     ┌────────────────────────┐
@@ -79,13 +81,15 @@ The repository includes real-world benchmark fall test videos:
                                                        └────────────────────────┘
 ```
 
-### 1. Biomechanical Features
-- **Torso Angle ($\theta_{torso}$)**: Angle formed by the midpoint of shoulders to midpoint of hips relative to the floor horizontal ($90^\circ = \text{standing}, 0^\circ = \text{flat on ground}$).
-- **Vertical Descent Rate ($v_y$)**: Normalized downward velocity measured in subject bounding box heights per second ($\text{h/s}$).
-- **Angular Collapse Rate ($\omega = \frac{d\theta}{dt}$)**: Rate of postural angle drop in degrees per second.
-- **Stillness Energy ($E_{motion}$)**: Temporal variance across visible anatomical landmarks to confirm post-impact immobility.
+### 生物力学特征
 
-### 2. State Machine Logic Flow
+- **躯干角度（`θ_torso`）**：肩部中点与髋部中点连线相对水平面的角度（`90°` 站立，`0°` 平躺）。
+- **垂直下落速率（`v_y`）**：以人体边界框高度为单位的垂直速度（`h/s`）。
+- **角度坍塌速率（`ω = dθ/dt`）**：姿态角度的下降速率（度/秒）。
+- **静止能量（`E_motion`）**：可见关键点的时序变化量，用于确认落地后是否静止。
+
+### 状态机逻辑
+
 ```
  [ MONITORING ] ──( v_y > 0.7 h/s OR ω > 35°/s )──> [ FALL_DETECTED ]
        ▲                                                     │
@@ -97,77 +101,77 @@ The repository includes real-world benchmark fall test videos:
 
 ---
 
-## 📁 Repository File Structure
+## 目录结构
 
 ```
 d:\A New Fall Detecion Sytem\
-├── run.bat                          # One-click Windows desktop launcher
-├── run.py                           # Interactive CLI runner with continuous loop
-├── fall_detection_all_in_one.py     # Standalone all-in-one pipeline (Zero sub-dependencies)
+├── run.bat                          # Windows 一键启动脚本
+├── run.py                           # 交互式命令行运行器（循环菜单）
+├── fall_detection_all_in_one.py     # 单文件全流程管线（无内部依赖）
 ├── core/
-│   ├── detector.py                  # YOLO26-Pose wrapper & keypoint extractor
-│   ├── tracker.py                   # Multi-person temporal tracklet manager
-│   ├── occlusion.py                 # Occlusion engine, Kalman extrapolation & bone imputation
-│   ├── kinematics.py                # Biomechanical kinematic feature engine
-│   ├── state_machine.py             # Multi-stage Fall State Machine
-│   └── visualizer.py                # Telemetry HUD visualizer & alert banners
-├── sample_videos/                   # Benchmark fall test dataset
-│   ├── standing_fall_1.mp4          # Sudden collapse fall
-│   ├── standing_fall_2.mp4          # Slip and fall
-│   ├── sitting_to_fall.mp4          # Chair fall
-│   ├── bed_rollout_fall.mp4         # Bed roll-out fall
-│   └── normal_activity_no_fall.mp4  # Normal ADL baseline (zero false alarm test)
-├── test_generator.py                # Synthetic occlusion test scenario generator
-├── requirements.txt                 # Clean dependency manifest
-├── FALL_DETECTION_SYSTEM_DESIGN.md  # Comprehensive research & mathematical design spec
-└── README.md                        # Documentation & quickstart guide
+│   ├── detector.py                  # YOLO26-Pose 封装与关键点提取
+│   ├── tracker.py                   # 多人时间轨迹管理（Tracklet）
+│   ├── occlusion.py                 # 遮挡引擎：Kalman 外推与骨骼插补
+│   ├── kinematics.py                # 生物力学运动特征引擎
+│   ├── state_machine.py             # 多阶段跌倒状态机
+│   └── visualizer.py                # 遥测 HUD 可视化与报警横幅
+├── sample_videos/                   # 基准跌倒测试数据集
+│   ├── standing_fall_1.mp4          # 骤然跌倒
+│   ├── standing_fall_2.mp4          # 滑倒
+│   ├── sitting_to_fall.mp4          # 椅子上跌落
+│   ├── bed_rollout_fall.mp4         # 床上滚落
+│   └── normal_activity_no_fall.mp4  # 日常活动基线（误报测试）
+├── test_generator.py                # 合成遮挡跌倒场景生成器
+├── requirements.txt                 # 依赖清单
+├── FALL_DETECTION_SYSTEM_DESIGN.md  # 系统与数学设计文档
+└── README.md                        # 本说明文档
 ```
 
 ---
 
-## 🛠️ Advanced CLI Usage (Direct Bypass)
+## 命令行直接调用
 
-If you prefer direct command-line execution without the interactive menu:
+除了交互菜单，也可以直接使用命令行参数调用：
 
 ```bash
-# Run on webcam (device 0)
+# 摄像头（设备 0）
 python fall_detection_all_in_one.py --source 0 --show
 
-# Run on a specific video file
+# 指定视频文件
 python fall_detection_all_in_one.py --source sample_videos/standing_fall_1.mp4 --show --save output_result.mp4
 
-# Run synthetic occlusion demo
+# 合成遮挡演示
 python fall_detection_all_in_one.py --source demo --show
 ```
 
 ---
 
-## ⚡ CPU Performance Tuning
+## CPU 性能调优
 
-The pose model (YOLO26n-Pose) runs on CPU by default. Inference is the dominant cost; use these options to trade a little smoothness/latency for much higher throughput:
+姿态模型默认在 CPU 上运行。推理是主要的性能开销，可通过以下参数在精度与吞吐量之间权衡：
 
 ```bash
-# Balanced: smaller inference size (recommended) - ~1.3-1.5x
+# 平衡：降低推理尺寸（推荐），约提升 1.3-1.5 倍
 python main.py --source video.mp4 --imgsz 480
 
-# Fast: also run the DNN every 2nd frame (reuse detections in between) - ~2x more
+# 快速：每 2 帧运行一次推理，中间帧复用检测结果，再提升约 2 倍
 python main.py --source video.mp4 --imgsz 480 --stride 2 --threads 4
 
-# Lightweight threads to avoid CPU contention on small pose models
+# 限制线程数，减少小模型在多数核下的争用
 python main.py --source video.mp4 --imgsz 640 --threads 4
 ```
 
-| Option | Default | Effect |
+| 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--imgsz` | `640` | DNN input size. `480`/`320` speed up CPU inference significantly (smaller = faster, lower accuracy on tiny subjects) |
-| `--stride` | `1` | Run the DNN every N-th frame and reuse last keypoints in between. `2`-`3` gives near-linear FPS gains |
-| `--threads` | `0` (auto) | Torch CPU threads. Small pose models parallelize poorly; `4` often beats the all-core default |
+| `--imgsz` | `640` | 推理输入尺寸。`480`/`320` 可显著提升 CPU 推理速度，但过小会降低小目标的精度 |
+| `--stride` | `1` | 每 N 帧运行一次推理，其余帧复用上次关键点。`2`-`3` 可近似线性提升帧率 |
+| `--threads` | `0`（自动） | Torch CPU 线程数。小姿态模型并行效率差，`4` 通常优于默认的全核配置 |
 
-*Measured (CPU, 16-core): 640px=8.5 FPS → 480px+4 threads=10.7 FPS → 480px+stride2=17.3 FPS → 480px+stride3=21.3 FPS*.
-For larger gains consider ONNX Runtime / OpenVINO export.
+*实测（16 核 CPU）：640px=8.5 FPS → 480px+4线程=10.7 FPS → 480px+stride2=17.3 FPS → 480px+stride3=21.3 FPS。*
+如需更大提升，可考虑导出为 ONNX Runtime / OpenVINO 推理。
 
 ---
 
-## 📜 Scientific Reference & Design Document
-For full mathematical formulations, biomechanical formulas, Kalman filter state equations, and multi-view homography matrices, refer to:
-👉 **[FALL_DETECTION_SYSTEM_DESIGN.md](file:///d:/A%20New%20Fall%20Detecion%20Sytem/FALL_DETECTION_SYSTEM_DESIGN.md)**
+## 参考文档
+
+数学公式、生物力学算法、Kalman 滤波器状态方程及多视角单应矩阵等详细说明，参见 [FALL_DETECTION_SYSTEM_DESIGN.md](FALL_DETECTION_SYSTEM_DESIGN.md)。
