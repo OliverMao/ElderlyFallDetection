@@ -106,7 +106,7 @@ The repo includes these benchmark fall clips:
 ```
 ├── run.bat                          # One-click launcher
 ├── run.py                           # Interactive CLI runner
-├── fall_detection_all_in_one.py     # Standalone all-in-one pipeline
+├── main.py                          # CLI entry point (run_pipeline)
 ├── core/
 │   ├── detector.py                  # Pose wrapper & keypoints
 │   ├── tracker.py                   # Multi-person tracklet manager
@@ -129,13 +129,13 @@ Besides the menu, you can run directly with CLI arguments:
 
 ```bash
 # Webcam (device 0)
-python fall_detection_all_in_one.py --source 0 --show
+python main.py --source 0 --show
 
 # A specific video file
-python fall_detection_all_in_one.py --source sample_videos/standing_fall_1.mp4 --show --save output_result.mp4
+python main.py --source sample_videos/standing_fall_1.mp4 --show --save output_result.mp4
 
 # Synthetic occlusion demo
-python fall_detection_all_in_one.py --source demo --show
+python main.py --source demo --show
 ```
 
 ---

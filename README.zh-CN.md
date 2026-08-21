@@ -106,7 +106,7 @@ Windows 下也可直接双击 `run.bat`。
 ```
 ├── run.bat                          # Windows 一键启动脚本
 ├── run.py                           # 交互式命令行运行器
-├── fall_detection_all_in_one.py     # 单文件全流程管线
+├── main.py                          # 命令行入口（run_pipeline）
 ├── core/
 │   ├── detector.py                  # YOLO26-Pose 封装与关键点提取
 │   ├── tracker.py                   # 多人时间轨迹管理
@@ -129,13 +129,13 @@ Windows 下也可直接双击 `run.bat`。
 
 ```bash
 # 摄像头（设备 0）
-python fall_detection_all_in_one.py --source 0 --show
+python main.py --source 0 --show
 
 # 指定视频文件
-python fall_detection_all_in_one.py --source sample_videos/standing_fall_1.mp4 --show --save output_result.mp4
+python main.py --source sample_videos/standing_fall_1.mp4 --show --save output_result.mp4
 
 # 合成遮挡演示
-python fall_detection_all_in_one.py --source demo --show
+python main.py --source demo --show
 ```
 
 ---

@@ -15,7 +15,8 @@ import glob
 import argparse
 from typing import Optional, List, Dict, Any
 import cv2
-from fall_detection_all_in_one import run_pipeline, generate_fall_test_video
+from main import run_pipeline
+from test_generator import generate_fall_test_video
 
 
 def get_user_choice() -> str:
